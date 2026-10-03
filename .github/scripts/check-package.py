@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED = {
     "Cargo.toml", "Cargo.toml.orig", "Cargo.lock", "README.md",
-    "LICENSE-MIT", "LICENSE-APACHE", "src/lib.rs",
+    "LICENSE-MIT", "LICENSE-APACHE", "src/lib.rs", "src/main.rs",
     "examples/detect.rs", "tests/detect.rs",
 }
 ALLOWED = REQUIRED | {".cargo_vcs_info.json"}
