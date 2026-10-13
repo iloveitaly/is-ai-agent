@@ -25,6 +25,17 @@ categories = ["command-line-interface", "development-tools"]
 
 [dependencies]
 
+[[bin]]
+name = "is-ai-agent"
+path = "src/main.rs"
+
 [[example]]
 name = "detect"
 path = "examples/detect.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

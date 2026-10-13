@@ -1,21 +1,30 @@
-name: Publish to crates.io
+name: Release
+
+# Runs when a GitHub release is published:
+#   verify  -> tag matches Cargo.toml, tests and crate contents pass
+#   binaries -> build the CLI per target and attach archives to the release
+#   publish -> cargo publish (last, because crates.io is irreversible)
+#
+# Assets are named `is-ai-agent-<tag>-<target>.{tar.gz,zip}` so mise can pick
+# one by OS/arch: `mise use -g github:sdairs/is-ai-agent`.
 
 on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
-  publish:
-    name: Publish ${{ github.event.release.tag_name }}
+  verify:
+    name: Verify ${{ github.event.release.tag_name }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Verify release tag matches Cargo.toml version
         run: |
@@ -32,6 +41,48 @@ jobs:
 
       - name: Verify published crate contents
         run: python3 .github/scripts/check-package.py
+
+  binaries:
+    name: Binary ${{ matrix.target }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin, os: macos-latest }
+          - { target: aarch64-apple-darwin, os: macos-latest }
+          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          - { target: aarch64-pc-windows-msvc, os: windows-latest }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
+        with:
+          bin: is-ai-agent
+          target: ${{ matrix.target }}
+          archive: $bin-$tag-$target
+          include: README.md,LICENSE-MIT,LICENSE-APACHE
+          checksum: sha256
+          locked: true
+          # Every target builds on a runner of its own OS (Linux on a matching
+          # arch, for musl), so plain cargo works and the action never
+          # installs `cross` or pulls its container images.
+          build-tool: cargo
+
+  publish:
+    name: Publish to crates.io
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Publish to crates.io
         env:

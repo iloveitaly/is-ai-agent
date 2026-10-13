@@ -13,6 +13,57 @@ Detection provides cooperative attribution from environment variables and a smal
 is-ai-agent = "0.6"
 ```
 
+## Command-line tool
+
+The crate also ships an `is-ai-agent` binary. Prebuilt binaries for Linux
+(musl, x86_64/aarch64), macOS (x86_64/aarch64) and Windows (x86_64/aarch64)
+are attached to each [GitHub release](https://github.com/sdairs/is-ai-agent/releases).
+
+```sh
+mise use -g github:sdairs/is-ai-agent   # or: cargo install is-ai-agent
+```
+
+It is silent by default and answers through its exit status:
+
+| Exit | Meaning                 |
+| ---- | ----------------------- |
+| `0`  | an AI agent was detected |
+| `1`  | no AI agent was detected |
+| `2`  | usage error             |
+
+```sh
+if is-ai-agent; then echo "i am AI"; fi
+```
+
+`-o, --output [<FORMAT>]` prints details to stdout without changing the exit status.
+A bare `--output` defaults to `id`:
+
+| Format | Agent detected                                         | No agent                |
+| ------ | ------------------------------------------------------ | ----------------------- |
+| `id` (default) | `claude-code`                                  | _(nothing)_             |
+| `name` | `Claude Code`                                          | _(nothing)_             |
+| `text` | `Claude Code (claude-code) detected via env CLAUDECODE=1` | `no AI agent detected` |
+| `json` | full result (below)                                    | same keys, `null` values |
+
+```sh
+agent=$(is-ai-agent --output) && echo "running under $agent"
+is-ai-agent -o json | jq .
+```
+
+```json
+{
+  "detected": true,
+  "id": "claude-code",
+  "name": "Claude Code",
+  "signal": { "type": "env", "name": "CLAUDECODE", "value": "1" },
+  "session_id": null,
+  "trace_id": null,
+  "traceparent": null
+}
+```
+
+`signal` is `{"type":"file","path":"/opt/.devin"}` for filesystem signals.
+
 ## Usage
 
 ```rust
