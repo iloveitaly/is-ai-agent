@@ -106,7 +106,7 @@ fn output_json_detected() {
 
 #[test]
 fn output_json_escapes_values() {
-    let out = run(&[("AGENT", "we\"ird\\name")], &["-o", "json"]);
+    let out = run(&[("AI_AGENT", "we\"ird\\name")], &["-o", "json"]);
     assert!(
         stdout(&out).contains(r#""value":"we\"ird\\name""#),
         "{}",
