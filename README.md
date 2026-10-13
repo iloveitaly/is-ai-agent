@@ -2,7 +2,7 @@
 
 Detect whether a CLI is being invoked by an AI coding agent, and identify which one.
 
-Inspired by the [`AGENT` environment variable proposal](https://github.com/agentsmd/agents.md/issues/136). Lets your CLI adapt its output — structured errors, more verbose tracebacks, no interactive prompts — when it's running under an agent rather than a human.
+Follows the [`AI_AGENT` environment variable proposal](https://github.com/agentsmd/agents.md/issues/136) (originally `AGENT`, which it keeps as a legacy fallback). Lets your CLI adapt its output — structured errors, more verbose tracebacks, no interactive prompts — when it's running under an agent rather than a human.
 
 Detection provides cooperative attribution from environment variables and a small filesystem check. Inherited markers do not prove that a model initiated this particular command, and no match does not prove a human caller. It identifies the harness, not the model selected inside it.
 
@@ -83,14 +83,14 @@ For tests or callers that want to consult a captured environment instead of the 
 use is_ai_agent::detect_with;
 
 let agent = detect_with(
-    |name| if name == "AGENT" { Some("goose".into()) } else { None },
+    |name| if name == "AI_AGENT" { Some("goose".into()) } else { None },
     |_| false,
 );
 ```
 
 ## Detection order
 
-1. The generic `AGENT` (the [agents.md proposal](https://github.com/agentsmd/agents.md/issues/136)) and then `AI_AGENT` ([@vercel/detect-agent](https://www.npmjs.com/package/@vercel/detect-agent)) env vars, when their value names a known agent. Existing canonical slugs are `goose`, `amp`, `claude-code`, `cowork`, `cursor`, `cursor-cli`, `gemini-cli`, `codex`, `augment`, `cline`, `opencode`, `trae`, `devin`, `replit`, `antigravity`, `github-copilot`, `crush`, `qwen-code`, `iflow-cli`, `amazon-q-cli`, `roo-code`, `codebuddy`, `grok-cli`, `warp`, `pi`, `kiro`, `firebender`, `openhands`, `vecli`, and `v0`; the seven new slugs and aliases are below. Generic aliases are explicit caller assertions, not claims that vendors export every spelling. A known outer identity wins over an inner harness marker. Whole-name matching comes before existing `@version` / underscore suffix handling, so `github_copilot_vscode_agent`, the new `github_copilot_app_agent`, `goose@1.2.3`, and `claude-code_2-1-201_agent` classify correctly.
+1. The standard `AI_AGENT` (the [agents.md proposal](https://github.com/agentsmd/agents.md/issues/136), also read first by [@vercel/detect-agent](https://www.npmjs.com/package/@vercel/detect-agent)) and then the legacy `AGENT` env var, when their value names a known agent. If both name known agents, `AI_AGENT` wins. Existing canonical slugs are `goose`, `amp`, `claude-code`, `cowork`, `cursor`, `cursor-cli`, `gemini-cli`, `codex`, `augment`, `cline`, `opencode`, `trae`, `devin`, `replit`, `antigravity`, `github-copilot`, `crush`, `qwen-code`, `iflow-cli`, `amazon-q-cli`, `roo-code`, `codebuddy`, `grok-cli`, `warp`, `pi`, `kiro`, `firebender`, `openhands`, `vecli`, and `v0`; the seven new slugs and aliases are below. Generic aliases are explicit caller assertions, not claims that vendors export every spelling. A known outer identity wins over an inner harness marker. Whole-name matching comes before existing `@version` / underscore suffix handling, so `github_copilot_vscode_agent`, the new `github_copilot_app_agent`, `goose@1.2.3`, and `claude-code_2-1-201_agent` classify correctly.
 
    Blank/whitespace-only values and trimmed `0`, `false`, `no`, or `off` (case-insensitive) are ignored. They do not disable other detection: `AGENT=false` with `KILO=1` still identifies Kilo Code.
 2. Tool-specific env vars:
@@ -148,7 +148,7 @@ let agent = detect_with(
    |---|---|
    | `/opt/.devin` | Devin |
 
-4. An unknown nonblank generic name or bare true value (e.g. `AGENT=1`) as a last resort, resolving to `AgentId::Unknown`. Tool-specific and filesystem signals outrank it, so `AGENT=1`, `KILO=1`, and `OPENCODE=1` together identify Kilo Code.
+4. An unknown nonblank `AI_AGENT` name, or a bare true (`1`, `true`, `yes`, `on`) `AI_AGENT` or `AGENT` value, as a last resort, resolving to `AgentId::Unknown`. An unknown `AGENT` name such as `AGENT=build-01` is ignored, because the name is generic enough to collide with unrelated tooling. Tool-specific and filesystem signals outrank it, so `AGENT=1`, `KILO=1`, and `OPENCODE=1` together identify Kilo Code.
 
 The detected `Agent` carries the `Signal` that matched, so callers can see exactly *how* detection fired.
 

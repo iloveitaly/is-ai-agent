@@ -88,7 +88,12 @@ def resolve(harness, pinned, selector="latest"):
                 raise ValueError("Invalid source commit")
             project = read_url(f"https://raw.githubusercontent.com/{repo}/{commit}/pyproject.toml").decode()
             section = re.search(r"(?ms)^\[project\]\s*\n(.*?)(?=^\[|\Z)", project)[1]
-            spec["version"] = exact_version(re.search(r'^version\s*=\s*"([^"]+)"', section, re.M)[1])
+            version = exact_version(re.search(r'^version\s*=\s*"([^"]+)"', section, re.M)[1])
+            # Since 0.21.7 the source tree carries a 0.0.0 placeholder; the
+            # release version reaches the runtime only via an install stamp.
+            if version == "0.0.0":
+                version = exact_version(release["tag_name"].removeprefix("v"))
+            spec["version"] = version
             url = f"https://codeload.github.com/{repo}/tar.gz/{commit}"
             digest = (pinned["source"]["sha256"] if url == pinned["source"]["url"]
                       else hashlib.sha256(read_url(url, 512 * 1024 * 1024)).hexdigest())

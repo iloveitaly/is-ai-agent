@@ -52,6 +52,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertTrue(spec["source"]["url"].endswith(sha))
         self.assertEqual(spec["source"]["sha256"], hashlib.sha256(b"archive").hexdigest())
 
+    def test_hermes_placeholder_version_falls_back_to_release_tag(self):
+        with patch.object(releases, "json_url", side_effect=[{"tag_name": "v0.21.7"}, {"sha": "b" * 40}]), \
+             patch.object(releases, "read_url", side_effect=[b'[project]\nversion = "0.0.0"\n', b"archive"]):
+            spec = releases.resolve("hermes-agent", run.HARNESS["hermes-agent"])
+        self.assertEqual(spec["version"], "0.21.7")
+
     def test_junie_resolves_npm_and_reported_binary_versions(self):
         mapping = json.dumps({"version": "3419.7", "marketing": "26.9.22"}).encode()
         with patch.object(releases, "json_url", side_effect=[
