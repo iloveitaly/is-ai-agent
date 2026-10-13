@@ -173,7 +173,7 @@ class InventoryTests(unittest.TestCase):
 
 
 class FakeGitHub:
-    prefix = "repos/example/repo/"
+    prefix = "repos/example/repo"
 
     def __init__(self):
         self.calls, self.issues, self.prs, self.refs = [], [], [], []
@@ -199,6 +199,21 @@ class FakeGitHub:
         if path.startswith("pulls"):
             return {"html_url": "https://github.com/example/repo/pull/7"}
         return {}
+
+
+class GitHubClientTests(unittest.TestCase):
+    def test_endpoints_have_no_trailing_slash(self):
+        api = publisher.GitHub("example/repo")
+        endpoints = []
+
+        def fake_run(command, **_):
+            endpoints.append(command[2])
+            return type("Done", (), {"returncode": 0, "stdout": "{}"})()
+
+        with patch.object(publisher.subprocess, "run", fake_run):
+            api.call("")
+            api.call("pulls")
+        self.assertEqual(endpoints, ["repos/example/repo", "repos/example/repo/pulls"])
 
 
 class PublisherTests(unittest.TestCase):

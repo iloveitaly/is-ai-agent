@@ -1,5 +1,5 @@
 // Public, version-pinned packages only. This runs during the isolated build.
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, cpSync, chmodSync, symlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, cpSync, chmodSync, symlinkSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 const [pkg, version] = process.argv.slice(2);
@@ -21,8 +21,25 @@ if (pkg === "vtcode" || pkg === "hermes-agent") {
   } else {
     execFileSync("apt-get", ["update"], { stdio: "inherit" });
     execFileSync("apt-get", ["install", "-y", "--no-install-recommends", "python3", "python3-venv", "git"], { stdio: "inherit" });
-    execFileSync("python3", ["-m", "venv", "/opt/hermes-venv"]);
-    execFileSync("/opt/hermes-venv/bin/pip", ["install", "--no-cache-dir", "-e", "/opt/hermes-agent"], { stdio: "inherit" });
+    // Hermes declares its runtime dependencies only for Python 3.14, newer
+    // than Debian's python3. A pinned uv provisions a checksum-verified
+    // 3.14 interpreter for the venv.
+    execFileSync("python3", ["-m", "venv", "/opt/uv"]);
+    execFileSync("/opt/uv/bin/pip", ["install", "--no-cache-dir", "uv==0.9.5"], { stdio: "inherit" });
+    const uvEnv = { ...process.env, UV_PYTHON_INSTALL_DIR: "/opt/uv-python", UV_NO_CACHE: "1" };
+    execFileSync("/opt/uv/bin/uv", ["venv", "--python", "3.14", "/opt/hermes-venv"], { stdio: "inherit", env: uvEnv });
+    execFileSync("/opt/uv/bin/uv", ["pip", "install", "--python", "/opt/hermes-venv/bin/python", "-e", "/opt/hermes-agent"],
+      { stdio: "inherit", env: uvEnv });
+    // Newer source archives report their version only through the stamp
+    // upstream packagers write; without one, `hermes --version` is unknown.
+    const stamp = "/opt/hermes-agent/scripts/write_install_stamp.py";
+    if (existsSync(stamp)) {
+      const commit = asset.url.match(/\/tar\.gz\/([0-9a-f]{40})$/)?.[1];
+      if (!commit) throw new Error("Hermes source commit unavailable");
+      execFileSync("/opt/hermes-venv/bin/python", [stamp, "--output", "/opt/hermes-agent/install-stamp.json",
+        "--commit", commit, "--base-version", version, "--distance", "0", "--source", "local",
+        "--update-mechanism", "external"], { stdio: "inherit" });
+    }
     symlinkSync("/opt/hermes-venv/bin/hermes", "/usr/local/bin/hermes");
   }
 } else if (pkg === "goose") {

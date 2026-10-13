@@ -21,10 +21,12 @@ class GitHub:
     def __init__(self, repository):
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
             raise ValueError("Invalid repository")
-        self.prefix = "repos/" + repository + "/"
+        self.prefix = "repos/" + repository
 
     def call(self, path, method="GET", payload=None):
-        command = ["gh", "api", self.prefix + path, "--method", method]
+        # The API rejects a trailing slash, so the repository itself is "".
+        endpoint = self.prefix + ("/" + path if path else "")
+        command = ["gh", "api", endpoint, "--method", method]
         if payload is not None:
             command += ["--input", "-"]
         response = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,

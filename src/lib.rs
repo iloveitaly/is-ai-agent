@@ -2,12 +2,13 @@
 //! and identify which one.
 //!
 //! Detection order:
-//! 1. The generic `AGENT` (agentsmd/agents.md#136) and `AI_AGENT`
-//!    (@vercel/detect-agent) env vars, when their value names a known agent.
+//! 1. The standard `AI_AGENT` (agentsmd/agents.md#136), then the legacy
+//!    `AGENT`, when their value names a known agent.
 //! 2. Tool-specific env vars (`CLAUDECODE`, `CURSOR_AGENT`, ...).
 //! 3. Filesystem signals (e.g. `/opt/.devin`).
-//! 4. An unknown name or bare true `AGENT`/`AI_AGENT` value (e.g. `AGENT=1`)
-//!    as a last resort, resolving to [`AgentId::Unknown`].
+//! 4. An unknown `AI_AGENT` name, or a bare true `AI_AGENT`/`AGENT` value
+//!    (e.g. `AGENT=1`), as a last resort, resolving to [`AgentId::Unknown`].
+//!    An unknown `AGENT` name is ignored: the name is too generic to trust.
 //!
 //! Blank generic values and the trimmed, case-insensitive values `0`, `false`,
 //! `no`, and `off` are ignored. They do not disable other detection rules.
@@ -440,11 +441,17 @@ where
         }
     };
 
-    // Known generic names override tool markers; Unknown waits for a specific match.
+    // Known generic names override tool markers; Unknown waits for a specific
+    // match. AI_AGENT is the agents.md standard and is read first; legacy
+    // AGENT is too generic to treat an arbitrary value as an agent name, so
+    // it only counts when it names a known agent or is a bare true value.
     let mut generic_fallback = None;
-    for var in ["AGENT", "AI_AGENT"] {
+    for var in ["AI_AGENT", "AGENT"] {
         if let Some(value) = generic_value(env(var)) {
             let (id, name) = classify_generic_value(&value);
+            if id == AgentId::Unknown && var == "AGENT" && !is_truthy(&value) {
+                continue;
+            }
             let agent = make(id, name, Signal::EnvVar { name: var, value });
             if id != AgentId::Unknown {
                 return Some(agent);
@@ -584,6 +591,14 @@ fn generic_value(v: Option<String>) -> Option<String> {
     })
 }
 
+/// Bare true value of a generic var, naming no particular agent.
+fn is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 /// Classify a generic `AGENT`/`AI_AGENT` value. The whole value is tried
 /// first because some vendors put separators inside the name itself (VS Code
 /// sets `AI_AGENT=github_copilot_vscode_agent`, which suffix-stripping would
@@ -697,6 +712,49 @@ mod tests {
         let agent = detect_with(env, |_| false).unwrap();
         assert_eq!(agent.id, AgentId::Unknown);
         assert_eq!(agent.name, "AI agent");
+    }
+
+    #[test]
+    fn ai_agent_var_takes_priority_over_agent_var() {
+        let env = env_from(&[
+            ("AGENT", "goose"),
+            ("AI_AGENT", "claude-code_2-1-284_agent"),
+        ]);
+        let agent = detect_with(env, |_| false).unwrap();
+        assert_eq!(agent.id, AgentId::ClaudeCode);
+        assert_eq!(
+            agent.signal,
+            Signal::EnvVar {
+                name: "AI_AGENT",
+                value: "claude-code_2-1-284_agent".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn unknown_agent_var_name_is_ignored() {
+        let env = env_from(&[("AGENT", "jenkins-build-01")]);
+        assert!(detect_with(env, |_| false).is_none());
+    }
+
+    #[test]
+    fn unknown_ai_agent_var_name_is_unknown() {
+        let env = env_from(&[("AI_AGENT", "some-new-agent_1-0_cli")]);
+        let agent = detect_with(env, |_| false).unwrap();
+        assert_eq!(agent.id, AgentId::Unknown);
+    }
+
+    #[test]
+    fn unknown_ai_agent_name_outranks_truthy_agent_var() {
+        let env = env_from(&[("AGENT", "1"), ("AI_AGENT", "some-new-agent")]);
+        let agent = detect_with(env, |_| false).unwrap();
+        assert_eq!(
+            agent.signal,
+            Signal::EnvVar {
+                name: "AI_AGENT",
+                value: "some-new-agent".to_string()
+            }
+        );
     }
 
     #[test]

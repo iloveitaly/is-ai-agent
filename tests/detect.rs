@@ -96,14 +96,7 @@ fn generic_blank_and_false_values_are_ignored() {
 #[test]
 fn unknown_names_and_bare_truth_remain_fallbacks_with_original_values() {
     for var in ["AGENT", "AI_AGENT"] {
-        for value in [
-            "1",
-            "true",
-            " TRUE ",
-            "yes",
-            "unknown-harness",
-            "  future-agent@1.0  ",
-        ] {
+        for value in ["1", "true", " TRUE ", "yes"] {
             let agent = captured_env(&[(var, value)]).unwrap();
             assert_eq!(agent.id, AgentId::Unknown, "{var}={value:?}");
             assert_env_signal(&agent, var, value);
@@ -112,16 +105,30 @@ fn unknown_names_and_bare_truth_remain_fallbacks_with_original_values() {
             assert_eq!(agent.id, AgentId::VTCode, "{var}={value:?}");
         }
     }
-    // The first generic fallback still wins if neither names a known agent.
-    let agent = captured_env(&[("AGENT", "outer-unknown"), ("AI_AGENT", "inner-unknown")]).unwrap();
-    assert_env_signal(&agent, "AGENT", "outer-unknown");
-    // A known AI_AGENT is more informative than the earlier Unknown fallback.
-    let agent = captured_env(&[("AGENT", "outer-unknown"), ("AI_AGENT", "hermes")]).unwrap();
+    for value in ["unknown-harness", "  future-agent@1.0  "] {
+        let agent = captured_env(&[("AI_AGENT", value)]).unwrap();
+        assert_eq!(agent.id, AgentId::Unknown, "AI_AGENT={value:?}");
+        assert_env_signal(&agent, "AI_AGENT", value);
+
+        let agent = captured_env(&[("AI_AGENT", value), ("VTCODE", "1")]).unwrap();
+        assert_eq!(agent.id, AgentId::VTCode, "AI_AGENT={value:?}");
+
+        // Legacy AGENT is too generic to treat an unknown value as a name.
+        assert!(
+            captured_env(&[("AGENT", value)]).is_none(),
+            "AGENT={value:?}"
+        );
+    }
+    // An unknown AI_AGENT name outranks a bare true AGENT.
+    let agent = captured_env(&[("AGENT", "1"), ("AI_AGENT", "inner-unknown")]).unwrap();
+    assert_env_signal(&agent, "AI_AGENT", "inner-unknown");
+    // A known AGENT is more informative than an unknown AI_AGENT fallback.
+    let agent = captured_env(&[("AGENT", "hermes"), ("AI_AGENT", "inner-unknown")]).unwrap();
     assert_eq!(agent.id, AgentId::Hermes);
 }
 
 #[test]
-fn known_generic_identity_preserves_agent_then_ai_agent_precedence() {
+fn known_generic_identity_prefers_ai_agent_over_agent() {
     let agent = captured_env(&[
         ("AGENT", "codex"),
         ("AI_AGENT", "hermes-agent"),
@@ -129,9 +136,9 @@ fn known_generic_identity_preserves_agent_then_ai_agent_precedence() {
         ("HERMES_SESSION_ID", "hermes-session"),
     ])
     .unwrap();
-    assert_eq!(agent.id, AgentId::Codex);
-    assert_eq!(agent.session_id, None);
-    assert_env_signal(&agent, "AGENT", "codex");
+    assert_eq!(agent.id, AgentId::Hermes);
+    assert_eq!(agent.session_id.as_deref(), Some("hermes-session"));
+    assert_env_signal(&agent, "AI_AGENT", "hermes-agent");
 
     let agent = captured_env(&[
         ("AI_AGENT", "codex"),
